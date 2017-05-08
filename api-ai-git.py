@@ -86,8 +86,15 @@ def load_state(commit_hash):
         commits = list(repo.iter_commits(max_count=10))
         for i, commit_obj in enumerate(commits):
             print("({})  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
-        num_pressed = int(input("Press number corresponding to which commit you'd like to rollback:"))
-        target_commit = commits[num_pressed]
+        try:
+            num_pressed = int(input("Press number corresponding to which commit you'd like to rollback: "))
+            if 0 <= num_pressed <= min(len(commits) - 1, 9):
+                target_commit = commits[num_pressed]
+            else:
+                raise ValueError
+        except ValueError:
+            print('Enter a value between 0-{}. Terminating.'.format(min(len(commits) - 1, 9)))
+            return
 
     print('Loading entire state! Please be patient.')
     intents, entities = None, None
@@ -100,6 +107,7 @@ def load_state(commit_hash):
             entities = pickle.loads(b.data_stream.read())
 
     sync_api_ai(intents, entities)
+    print('Refresh the API.ai dashboard to see changes')
 
 def sync_api_ai(old_intents, old_entities):
     cur_intents = get_resource_dict('intents')
