@@ -2,6 +2,7 @@ import os
 import pickle
 import requests
 import click
+import git
 from git import Repo
 
 API_AI_HEADERS = None
@@ -44,19 +45,31 @@ def save_state(push):
         print('Not pushing anything!')
 
 @cli.command()
-def load_state():
+@click.option('--commit-hash', default=None, help="A commit hash to make the state of API.ai match.")
+def load_state(commit_hash):
     """
     Loads all intents to API.ai from current commit
     """
     if not environment_valid():
         return
+    repo = Repo(os.getcwd())
+    if not commit_hash:
+        commits = list(repo.iter_commits('master', max_count=10))
+        for i, commit in enumerate(commits):
+            print("{}  {}  {}".format(i, commit.hexsha, commit.message))
+        num_pressed = int(input("Press number corresponding to which commit you'd like to rollback:"))
+        print("{} corresponds to commit hash {}, is that correct?".format(num_pressed, commits[num_pressed].hexsha))
+        commit_hash = commits[num_pressed].hexsha
+
     print('Loading entire state!')
+    head_hash = repo.head.commit.hexsha
+    repo.head.checkout(commit_hash)
     # 'rb' means read the files in binary mode
     with open('intents.pickle', 'rb') as f, open('entities.pickle', 'rb') as f2:
         intents = pickle.load(f)
         entities = pickle.load(f2)
 
-    repo = Repo(os.getcwd())
+    repo.head.checkout(head_hash)
     print(intents)
     print(entities)
 
