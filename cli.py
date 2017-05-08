@@ -31,8 +31,9 @@ def init(repo_url):
     repo.create_submodule(API_AI_HISTORY_DIR, '{}/{}'.format(os.getcwd(), API_AI_HISTORY_DIR), url=repo_url, branch='master')
 
 @cli.command()
-@click.option('--push', default=False, help='Automatically push this commit if connected & configured to a remote repo')
-def save_state(push):
+@click.option('--commit', is_flag=True, help='Automatically commit the saved state.')
+@click.option('--push', is_flag=True, help='Automatically push (and commit) the saved state')
+def save_state(push, commit):
     """
     Saves API.ai state (Intents/Entities) as serialized data to be loaded later
     """
@@ -50,7 +51,10 @@ def save_state(push):
         API_AI_REPO + '/intents.pickle',
         API_AI_REPO + '/entities.pickle'
     ])
-    repo.index.commit('# Intents: {}, # Entities: {}'.format(len(intents), len(entities)))
+    if push:
+        commit = True
+    if commit:
+        repo.index.commit('# Intents: {}, # Entities: {}'.format(len(intents), len(entities)))
     if push:
         repo.index.push()
 
