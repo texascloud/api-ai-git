@@ -81,23 +81,27 @@ def load_state(commit_hash):
 def sync_api_ai(old_intents, old_entities):
     cur_intents = get_resource_dict('intents')
     cur_entities = get_resource_dict('entities')
+    cur_intents_ids = { x['id'] for x in cur_intents.values() }
+    cur_entities_ids = { x['id'] for x in cur_entities.values() }
+    old_intents_ids = { x['id'] for x in old_intents.values() }
+    old_entities_ids = { x['id'] for x in old_entities.values() }
 
-    cur_intents_ids = {x['id'] for x in cur_intents.values()}
-    old_intents_ids = {x['id'] for x in old_intents.values()}
-    cur_entities_ids = {x['id'] for x in cur_entities.values()}
-    cur_entities_ids = {x['id'] for x in old_entities.values()}
+    # DELETE all current Intents
+    intents_to_delete = cur_intents_ids - old_intents_ids
+    if len(intents_to_delete) > 0:
+        for intent_id in intents_to_delete:
+            requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
 
-    # DELETE all current intents
-    for intent_id in cur_intents_ids:
-        resp = requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
-        print(resp.status_code)
+    # DELETE all current Entities
+    # for entity_id in cur_entities_ids:
+    #     requests.delete(BASE_URL+'entity/'+entity_id, headers=API_AI_HEADERS)
+
     # CREATE all old intents (will have new IDs now but that's okay)
     for intent in old_intents.values():
-        # make REST call to delete intent
+        # Intent object can't have the 'id' attribute for a POST
         if intent.get('id') is not None:
             del intent['id']
-        resp = requests.post(BASE_URL+'intents', headers=API_AI_HEADERS, data=json.dumps(intent))
-        print(resp.status_code)
+        requests.post(BASE_URL+'intents', headers=API_AI_HEADERS, json=intent)
 
     # DELETE all Intents whose ID is not in the old Intent data
     # intents_to_delete = cur_intents_ids - old_intents_ids
@@ -115,10 +119,10 @@ def sync_api_ai(old_intents, old_entities):
     #         requests.post(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, data=json.dumps(old_intents[intent_id]))
 
     # UPDATE the Intents in API.ai whose ID appears in the old data to be equivalent to the old data
-    # for intent_id in cur_intents_ids & old_intents_ids:
-    #     if cur_intents[intent_id] != old_intents[intent_id]:
-    #         resp = requests.put(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, data="'{}'".format(json.dumps(old_intents[intent_id])))
-    #         print(resp.status_code)
+    for intent_id in cur_intents_ids & old_intents_ids:
+        if cur_intents[intent_id] != old_intents[intent_id]:
+            resp = requests.put(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, json=old_intents[intent_id])
+            print(resp.status_code)
 
 
 def get_resource_dict(resource):
