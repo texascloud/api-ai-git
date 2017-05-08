@@ -29,8 +29,6 @@ def save_state(push):
     with open('intents.pickle', 'wb') as f, open('entities.pickle', 'wb') as f2:
         pickle.dump(intents, f)
         pickle.dump(entities, f2)
-    print(intents)
-    print(entities)
     if push:
         print('Pushing committed changes to remote repo')
     elif not push:
@@ -62,7 +60,7 @@ def load_state(commit_hash):
         print("{} corresponds to commit hash {}, is that correct?".format(num_pressed, commits[num_pressed].hexsha))
         target_commit = commits[num_pressed]
 
-    print('Loading entire state!')
+    print('Loading entire state! Please be patient.')
     intents, entities = None, None
     # TODO(jhurt): make this only iterate through the API.ai specific pickle files.
     # Maybe put them in their own directory and limit the "tree" path to blobs in that path?
@@ -72,58 +70,37 @@ def load_state(commit_hash):
         if b.name == "entities.pickle":
             entities = pickle.loads(b.data_stream.read())
 
-    # Take a diff of the keys for both intents/entities.
-    # Delete from API.ai the intents/entities NOT present in our "old" intent/entity data
     sync_api_ai(intents, entities)
-    print(intents)
-    print(entities)
 
 def sync_api_ai(old_intents, old_entities):
     cur_intents = get_resource_dict('intents')
     cur_entities = get_resource_dict('entities')
     cur_intents_ids = { x['id'] for x in cur_intents.values() }
     cur_entities_ids = { x['id'] for x in cur_entities.values() }
-    old_intents_ids = { x['id'] for x in old_intents.values() }
-    old_entities_ids = { x['id'] for x in old_entities.values() }
 
+    # TODO(jhurt): Currently deleting everything then recreating everything due to odd behavior regarding IDs.
+    # Make this more efficient cuz numerous or large Intents/Entities could take a long time to send over the network.
     # DELETE all current Intents
-    intents_to_delete = cur_intents_ids - old_intents_ids
-    if len(intents_to_delete) > 0:
-        for intent_id in intents_to_delete:
-            requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
+    for intent_id in cur_intents_ids:
+        requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
 
     # DELETE all current Entities
-    # for entity_id in cur_entities_ids:
-    #     requests.delete(BASE_URL+'entity/'+entity_id, headers=API_AI_HEADERS)
+    for entity_id in cur_entities_ids:
+        requests.delete(BASE_URL+'entity/'+entity_id, headers=API_AI_HEADERS)
 
-    # CREATE all old intents (will have new IDs now but that's okay)
+    # CREATE all old Intents (will have new IDs now but that's okay)
     for intent in old_intents.values():
         # Intent object can't have the 'id' attribute for a POST
         if intent.get('id') is not None:
             del intent['id']
         requests.post(BASE_URL+'intents', headers=API_AI_HEADERS, json=intent)
 
-    # DELETE all Intents whose ID is not in the old Intent data
-    # intents_to_delete = cur_intents_ids - old_intents_ids
-    # if len(intents_to_delete) > 0:
-    #     for intent_id in intents_to_delete:
-    #         # make REST call to delete intent
-    #         resp = requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
-    #         print(resp.status_code)
-
-    # CREATE new Intents for IDs that appear in the old data but is not currently in API.ai (meaning they were deleted)
-    # intents_to_create = old_intents_ids - cur_intents_ids
-    # if len(intents_to_create) > 0:
-    #     for intent_id in intents_to_create:
-    #         # make REST call to delete intent
-    #         requests.post(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, data=json.dumps(old_intents[intent_id]))
-
-    # UPDATE the Intents in API.ai whose ID appears in the old data to be equivalent to the old data
-    for intent_id in cur_intents_ids & old_intents_ids:
-        if cur_intents[intent_id] != old_intents[intent_id]:
-            resp = requests.put(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, json=old_intents[intent_id])
-            print(resp.status_code)
-
+    # CREATE all old Entities (will have new IDs now but that's okay)
+    for entity in old_entities.values():
+        # Entity object can't have the 'id' attribute for a POST
+        if entity.get('id') is not None:
+            del entity['id']
+        requests.post(BASE_URL+'entities', headers=API_AI_HEADERS, json=entity)
 
 def get_resource_dict(resource):
     """
