@@ -28,6 +28,6 @@ This is a CLI tool to version control intents and entities in API.ai born out of
 (1)  fedb991cd6667e73c662ad74b03773955e189f9b  # Intents: 3, # Entities: 1
 (2)  11edc81f6d2a1e9ede198b75a90d021124c5207b  test
 (3)  520006c8aae7c632c7805c76f6668b27804813f9  Initial commit
-Press number corresponding to which commit you'd like to rollback:
+Press number corresponding to which commit you'd like to load the state from:
 ```
 

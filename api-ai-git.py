@@ -87,7 +87,7 @@ def load_state(commit_hash):
         for i, commit_obj in enumerate(commits):
             print("({})  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
         try:
-            num_pressed = int(input("Press number corresponding to which commit you'd like to rollback: "))
+            num_pressed = int(input("Press number corresponding to which commit you'd like to load the state from: "))
             if 0 <= num_pressed <= min(len(commits) - 1, 9):
                 target_commit = commits[num_pressed]
             else:
