@@ -1,0 +1,4 @@
+[submodule "api_ai_history"]
+	url = https://github.com/CamelCaseNotation/api-ai-agent-test
+	path = api_ai_history
+	branch = refs/heads/master

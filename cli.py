@@ -1,24 +1,40 @@
+# Authored by Joshua Hurt 05/08/17
 import os
 import pickle
 import requests
 import click
-import json
 from git import Repo
 
 API_AI_HEADERS = None
 BASE_URL = 'https://api.api.ai/v1/'
 DEV_KEY = None
 DEV_TOKEN_ENV_NAME = 'API_AI_DEV_TOKEN'
+API_AI_HISTORY_DIR = 'api_ai_history'
+API_AI_REPO = '{}/{}'.format(os.getcwd(), API_AI_HISTORY_DIR)
 
 @click.group()
 def cli():
     pass
 
 @cli.command()
+@click.argument('repo_url')
+def init(repo_url):
+    # TODO(jhurt): Handle private repos by using user's Github credentials
+    if requests.head(repo_url).status_code != 200:
+        print('Cannot reach this URL. Terminating.')
+        return
+    repo = Repo(os.getcwd())
+    for module in repo.submodules:
+        if module.name == API_AI_HISTORY_DIR:
+            print('Submodule already exists!')
+            return
+    repo.create_submodule(API_AI_HISTORY_DIR, '{}/{}'.format(os.getcwd(), API_AI_HISTORY_DIR), url=repo_url, branch='master')
+
+@cli.command()
 @click.option('--push', default=False, help='Automatically push this commit if connected & configured to a remote repo')
 def save_state(push):
     """
-    Saves API.ai state (intents and entities) and commits them for version controlling.
+    Saves API.ai state (Intents/Entities) as serialized data to be loaded later
     """
     if not environment_valid():
         return
@@ -26,23 +42,27 @@ def save_state(push):
     intents = get_resource_dict('intents')
     entities = get_resource_dict('entities')
     # 'wb' means write the files in binary mode
-    with open('intents.pickle', 'wb') as f, open('entities.pickle', 'wb') as f2:
+    with open(API_AI_HISTORY_DIR + '/intents.pickle', 'wb') as f, open(API_AI_HISTORY_DIR + '/entities.pickle', 'wb') as f2:
         pickle.dump(intents, f)
         pickle.dump(entities, f2)
+    repo = Repo(API_AI_REPO)
+    repo.index.add([
+        API_AI_REPO + '/intents.pickle',
+        API_AI_REPO + '/entities.pickle'
+    ])
+    repo.index.commit('# Intents: {}, # Entities: {}'.format(len(intents), len(entities)))
     if push:
-        print('Pushing committed changes to remote repo')
-    elif not push:
-        print('Not pushing anything!')
+        repo.index.push()
 
 @cli.command()
 @click.option('--commit-hash', default=None, help="A commit hash to make the state of API.ai match.")
 def load_state(commit_hash):
     """
-    Loads all intents to API.ai from current commit
+    Restores state of all Intents/Entities from commit hash to API.ai
     """
     if not environment_valid():
         return
-    repo = Repo(os.getcwd())
+    repo = Repo(API_AI_REPO)
     target_commit = None
     # Get the Commit object based on the hash user provided
     if commit_hash:
@@ -55,9 +75,8 @@ def load_state(commit_hash):
         # Show last 10 commits from CURRENT BRANCH
         commits = list(repo.iter_commits(max_count=10))
         for i, commit_obj in enumerate(commits):
-            print("{}  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
+            print("({})  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
         num_pressed = int(input("Press number corresponding to which commit you'd like to rollback:"))
-        print("{} corresponds to commit hash {}, is that correct?".format(num_pressed, commits[num_pressed].hexsha))
         target_commit = commits[num_pressed]
 
     print('Loading entire state! Please be patient.')
@@ -80,13 +99,14 @@ def sync_api_ai(old_intents, old_entities):
 
     # TODO(jhurt): Currently deleting everything then recreating everything due to odd behavior regarding IDs.
     # Make this more efficient cuz numerous or large Intents/Entities could take a long time to send over the network.
+
     # DELETE all current Intents
     for intent_id in cur_intents_ids:
         requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
 
     # DELETE all current Entities
     for entity_id in cur_entities_ids:
-        requests.delete(BASE_URL+'entity/'+entity_id, headers=API_AI_HEADERS)
+        requests.delete(BASE_URL+'entities/'+entity_id, headers=API_AI_HEADERS)
 
     # CREATE all old Intents (will have new IDs now but that's okay)
     for intent in old_intents.values():
@@ -114,56 +134,6 @@ def get_resource_dict(resource):
         resources[d['id']] = requests.get(BASE_URL+resource+'/'+d['id'], headers=API_AI_HEADERS).json()
     return resources
 
-@cli.command()
-def save_all_intents():
-    """
-    Saves all intents from API.ai and commits them to the current git repo we're in.
-    """
-    if not environment_valid():
-        return
-    print('Saving them!')
-    req = requests.get(BASE_URL+'intents', headers=API_AI_HEADERS)
-    intents = req.json()
-    with open('intents.pickle', 'wb') as f:
-        pickle.dump(intents, f)
-    print(intents)
-
-@cli.command()
-def load_all_intents():
-    """
-    Loads all intents to API.ai from current commit
-    """
-    if not environment_valid():
-        return
-    print('Saving them!')
-    req = requests.get(BASE_URL+'intents', headers=API_AI_HEADERS)
-    intents = req.json()
-    with open('intents.pickle', 'wb') as f:
-        pickle.dump(intents, f)
-    print(intents)
-
-@cli.command()
-def main():
-    if not environment_valid():
-        return
-    req = requests.get(BASE_URL+'intents', headers=API_AI_HEADERS)
-    intents = req.json()
-    print(intents)
-
-def send_request(rest_type, endpoint):
-    dev_key = os.getenv(DEV_TOKEN_ENV_NAME)
-    if not dev_key:
-        print("Please set environment variable {}".format(DEV_TOKEN_ENV_NAME))
-        return None
-    api_ai_headers = {'Authorization' : 'Bearer {}'.format(dev_key)}
-    if rest_type is 'GET':
-        req = requests.get(BASE_URL+endpoint, headers=api_ai_headers)
-        return req.json()
-
-
-    print('nah')
-
-
 def environment_valid():
     global API_AI_HEADERS
     global BASE_URL
@@ -175,6 +145,15 @@ def environment_valid():
         print("Please set environment variable {}".format(DEV_TOKEN_ENV_NAME))
         return False
     API_AI_HEADERS = {'Authorization' : 'Bearer {}'.format(DEV_KEY)}
+    repo = Repo(os.getcwd())
+    found_submodule = False
+    for module in repo.submodules:
+        if module.name == API_AI_HISTORY_DIR:
+            found_submodule = True
+    if not found_submodule:
+        print("Re-run tool with 'init <REPO_URL>' command where <REPO_URL> is a "
+              "public Github repo where you would like to save your API.ai history.")
+        return False
     return True
 
 
