@@ -8,11 +8,11 @@ This is a CLI tool to version control intents and entities in API.ai born out of
 
 ### Instructions for setup and use:
 * pip install -r requirements.txt
-* ./api-ai-versioner.py init <URL_to_repo>
+* api-ai-git.py init <URL_to_repo>
 * \# save state of all Intents/Entities and commit
-* ./api-ai-versioner.py save_state --commit
+* api-ai-git.py save_state --commit
 * \# load a saved state from a specific commit hash
-* ./api-ai-versioner.py load_state --commit-hash 123abc
+* api-ai-git.py load_state --commit-hash 123abc
 * \# pick from a list of the last 10 commits to load a state
-* ./api-ai-versioner.py load_state
+* api-ai-git.py load_state
 
