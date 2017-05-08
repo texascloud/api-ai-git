@@ -2,7 +2,7 @@ import os
 import pickle
 import requests
 import click
-import git
+import json
 from git import Repo
 
 API_AI_HEADERS = None
@@ -23,16 +23,8 @@ def save_state(push):
     if not environment_valid():
         return
     print('Saving entire state!')
-    intents_json = requests.get(BASE_URL+'intents', headers=API_AI_HEADERS).json()
-    entities_json = requests.get(BASE_URL+'entities', headers=API_AI_HEADERS).json()
-    intents = {}
-    entities = {}
-    for d in intents_json:
-        intents[d['id']] = requests.get(BASE_URL+'intents/'+d['id'], headers=API_AI_HEADERS).json()
-
-    for d in entities_json:
-        entities[d['id']] = requests.get(BASE_URL+'entities/'+d['id'], headers=API_AI_HEADERS).json()
-
+    intents = get_resource_dict('intents')
+    entities = get_resource_dict('entities')
     # 'wb' means write the files in binary mode
     with open('intents.pickle', 'wb') as f, open('entities.pickle', 'wb') as f2:
         pickle.dump(intents, f)
@@ -53,25 +45,93 @@ def load_state(commit_hash):
     if not environment_valid():
         return
     repo = Repo(os.getcwd())
+    target_commit = None
+    # Get the Commit object based on the hash user provided
+    if commit_hash:
+        for c in repo.iter_commits():
+            if c.hexsha == commit_hash:
+                target_commit = c
+                break
+    # User didn't provide a commit hash so show last 10 for them to choose from
     if not commit_hash:
-        commits = list(repo.iter_commits('master', max_count=10))
-        for i, commit in enumerate(commits):
-            print("{}  {}  {}".format(i, commit.hexsha, commit.message))
+        # Show last 10 commits from CURRENT BRANCH
+        commits = list(repo.iter_commits(max_count=10))
+        for i, commit_obj in enumerate(commits):
+            print("{}  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
         num_pressed = int(input("Press number corresponding to which commit you'd like to rollback:"))
         print("{} corresponds to commit hash {}, is that correct?".format(num_pressed, commits[num_pressed].hexsha))
-        commit_hash = commits[num_pressed].hexsha
+        target_commit = commits[num_pressed]
 
     print('Loading entire state!')
-    head_hash = repo.head.commit.hexsha
-    repo.head.checkout(commit_hash)
-    # 'rb' means read the files in binary mode
-    with open('intents.pickle', 'rb') as f, open('entities.pickle', 'rb') as f2:
-        intents = pickle.load(f)
-        entities = pickle.load(f2)
+    intents, entities = None, None
+    # TODO(jhurt): make this only iterate through the API.ai specific pickle files.
+    # Maybe put them in their own directory and limit the "tree" path to blobs in that path?
+    for b in target_commit.tree.blobs:
+        if b.name == "intents.pickle":
+            intents = pickle.loads(b.data_stream.read())
+        if b.name == "entities.pickle":
+            entities = pickle.loads(b.data_stream.read())
 
-    repo.head.checkout(head_hash)
+    # Take a diff of the keys for both intents/entities.
+    # Delete from API.ai the intents/entities NOT present in our "old" intent/entity data
+    sync_api_ai(intents, entities)
     print(intents)
     print(entities)
+
+def sync_api_ai(old_intents, old_entities):
+    cur_intents = get_resource_dict('intents')
+    cur_entities = get_resource_dict('entities')
+
+    cur_intents_ids = {x['id'] for x in cur_intents.values()}
+    old_intents_ids = {x['id'] for x in old_intents.values()}
+    cur_entities_ids = {x['id'] for x in cur_entities.values()}
+    cur_entities_ids = {x['id'] for x in old_entities.values()}
+
+    # DELETE all current intents
+    for intent_id in cur_intents_ids:
+        resp = requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
+        print(resp.status_code)
+    # CREATE all old intents (will have new IDs now but that's okay)
+    for intent in old_intents.values():
+        # make REST call to delete intent
+        if intent.get('id') is not None:
+            del intent['id']
+        resp = requests.post(BASE_URL+'intents', headers=API_AI_HEADERS, data=json.dumps(intent))
+        print(resp.status_code)
+
+    # DELETE all Intents whose ID is not in the old Intent data
+    # intents_to_delete = cur_intents_ids - old_intents_ids
+    # if len(intents_to_delete) > 0:
+    #     for intent_id in intents_to_delete:
+    #         # make REST call to delete intent
+    #         resp = requests.delete(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS)
+    #         print(resp.status_code)
+
+    # CREATE new Intents for IDs that appear in the old data but is not currently in API.ai (meaning they were deleted)
+    # intents_to_create = old_intents_ids - cur_intents_ids
+    # if len(intents_to_create) > 0:
+    #     for intent_id in intents_to_create:
+    #         # make REST call to delete intent
+    #         requests.post(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, data=json.dumps(old_intents[intent_id]))
+
+    # UPDATE the Intents in API.ai whose ID appears in the old data to be equivalent to the old data
+    # for intent_id in cur_intents_ids & old_intents_ids:
+    #     if cur_intents[intent_id] != old_intents[intent_id]:
+    #         resp = requests.put(BASE_URL+'intents/'+intent_id, headers=API_AI_HEADERS, data="'{}'".format(json.dumps(old_intents[intent_id])))
+    #         print(resp.status_code)
+
+
+def get_resource_dict(resource):
+    """
+    Meh.
+    :param resource: either 'intents' or 'entities' as of right now
+    :return: dict in form { 'id' : resource_dict }
+    """
+    resource_json = requests.get(BASE_URL+resource, headers=API_AI_HEADERS).json()
+    resources = {}
+    for d in resource_json:
+        resources[d['id']] = requests.get(BASE_URL+resource+'/'+d['id'], headers=API_AI_HEADERS).json()
+    return resources
 
 @cli.command()
 def save_all_intents():
