@@ -7,7 +7,7 @@ This is a CLI tool to version control intents and entities in API.ai born out of
 * Load the state of Intents and Entities from a previous commit to API.ai
 
 ### Instructions for setup and use:
-```python
+```
 > pip install -r requirements.txt
 
 # Need to clone a submodule in current repo. The submodule is just another repo whose job is to only track API.ai changes
@@ -29,6 +29,5 @@ This is a CLI tool to version control intents and entities in API.ai born out of
 (2)  11edc81f6d2a1e9ede198b75a90d021124c5207b  test
 (3)  520006c8aae7c632c7805c76f6668b27804813f9  Initial commit
 Press number corresponding to which commit you'd like to rollback:
-
 ```
 
