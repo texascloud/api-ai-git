@@ -1,3 +1,4 @@
+#!/bin/python3
 # Authored by Joshua Hurt 05/08/17
 import os
 import pickle
@@ -19,16 +20,21 @@ def cli():
 @cli.command()
 @click.argument('repo_url')
 def init(repo_url):
+    """
+    Clones submodule (separate repo) to keep track of API.ai history separately. This is required before use.
+    """
     # TODO(jhurt): Handle private repos by using user's Github credentials
-    if requests.head(repo_url).status_code != 200:
-        print('Cannot reach this URL. Terminating.')
+    try:
+        if requests.head(repo_url).status_code != 200:
+            print('Cannot reach this URL. Terminating.')
+            return
+    except Exception:
+        # Likely a malformed URL, but requests can throw any number of different URL related Exceptions, so catch all
+        print('Likely a malformed URL. Terminating.')
         return
     repo = Repo(os.getcwd())
-    for module in repo.submodules:
-        if module.name == API_AI_HISTORY_DIR:
-            print('Submodule already exists!')
-            return
     repo.create_submodule(API_AI_HISTORY_DIR, '{}/{}'.format(os.getcwd(), API_AI_HISTORY_DIR), url=repo_url, branch='master')
+    print('Submodule added. You may now save/load your state from/to API.ai')
 
 @cli.command()
 @click.option('--commit', is_flag=True, help='Automatically commit the saved state.')
