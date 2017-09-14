@@ -88,12 +88,14 @@ def load_state(commit_hash):
             print("({})  {}  {}".format(i, commit_obj.hexsha, commit_obj.message))
         try:
             num_pressed = int(input("Press number corresponding to which commit you'd like to load the state from: "))
-            if 0 <= num_pressed <= min(len(commits) - 1, 9):
+            # this if statement is some real wild shit fam
+            num_recent_commits = min(len(commits) - 1, 9)
+            if 0 <= num_pressed <= num_recent_commits:
                 target_commit = commits[num_pressed]
             else:
                 raise ValueError
         except ValueError:
-            print('Enter a value between 0-{}. Terminating.'.format(min(len(commits) - 1, 9)))
+            print('Enter a value between 0-{}. Terminating.'.format(num_recent_commits))
             return
 
     print('Loading entire state! Please be patient.')
