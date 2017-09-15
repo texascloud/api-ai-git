@@ -57,6 +57,8 @@ def save_state(push, commit):
         API_AI_REPO + '/intents.pickle',
         API_AI_REPO + '/entities.pickle'
     ])
+
+    # What on earth is going on here?
     if push:
         commit = True
     if commit:
